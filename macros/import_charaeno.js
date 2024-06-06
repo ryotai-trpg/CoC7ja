@@ -1,7 +1,7 @@
 /**
  * 実装した際のバージョン
- * - Foundry VTT 0.11.307
- * - Call of Cthulhu 7th edition 0.10.5 https://github.com/HavlockV/CoC7-FoundryVTT/
+ * - Foundry VTT 12.325
+ * - Call of Cthulhu 7th edition 0.10.14 https://github.com/HavlockV/CoC7-FoundryVTT/
  */
 Dialog.prompt({
   title: "Charaeno からインポート",
@@ -64,16 +64,16 @@ const parseInput = (input) => {
 const createImportCharactersFolderIfNotExists = async () => {
   let importedCharactersFolder = game.folders.find(
     entry =>
-      entry.name === "Imported characters" && entry.type === "Actor"
+      entry.name === "インポート・キャラクター" && entry.type === "Actor"
   );
   if (importedCharactersFolder === null || importedCharactersFolder === undefined) {
     // Create the folder
     importedCharactersFolder = await Folder.create({
-      name: "Imported characters",
+      name: "インポート・キャラクター",
       type: "Actor",
       parent: null,
     });
-    ui.notifications.info("Created Imported Characters folder");
+    ui.notifications.info("'インポート・キャラクター'フォルダを作成");
   }
   return importedCharactersFolder;
 };
@@ -97,7 +97,7 @@ const createCharacter = async (data, url) => {
     name: data.name,
     type: "character",
     folder: importedCharactersFolder.id,
-    data: {},
+    system: {},
   });
   await updateActorData(actor, data, url);
   await addSkills(actor, data, LIST);
@@ -110,27 +110,28 @@ const createCharacter = async (data, url) => {
 const updateActorData = (actor, data, url) => {
   const updateData = {};
   ["occupation", "age", "sex", "residence", "birthplace"].forEach((key) => {
-    updateData[`data.infos.${key}`] = data[key];
+    updateData[`system.infos.${key}`] = data[key];
   });
-  updateData["data.infos.age"] = data.age;
+  updateData["system.infos.age"] = data.age;
   ["str", "con", "siz", "dex", "app", "int", "pow", "edu"].forEach((key) => {
-    updateData[`data.characteristics.${key}.value`] = data.characteristics[key];
+    updateData[`system.characteristics.${key}.value`] = data.characteristics[key];
   });
   ["hp", "mp", "mov", "db", "build"].forEach((key) => {
-    updateData[`data.attribs.${key}.value`] = data.attribute[key];
+    updateData[`system.attribs.${key}.value`] = data.attribute[key];
   });
-  updateData["data.attribs.san.value"] = data.attribute.san.value;
-  updateData["data.attribs.lck.value"] = data.attribute.luck;
+  updateData["system.attribs.san.value"] = data.attribute.san.value;
+  updateData["system.attribs.san.dailyLimit"] = Math.floor(data.attribute.san.value / 5);
+  updateData["system.attribs.lck.value"] = data.attribute.luck;
 
   if (
     ["cash", "spendingLevel", "assetsDetails"]
       .map((key) => data.credit[key])
       .some(Boolean)
   ) {
-    updateData["data.flags.manualCredit"] = true;
-    updateData[`data.monetary.cash`] = data.credit.cash;
-    updateData[`data.monetary.spendingLevel`] = data.credit.spendingLevel;
-    updateData[`data.monetary.assets`] = data.credit.assetsDetails;
+    updateData["system.flags.manualCredit"] = true;
+    updateData[`system.monetary.cash`] = data.credit.cash;
+    updateData[`system.monetary.spendingLevel`] = data.credit.spendingLevel;
+    updateData[`system.monetary.assets`] = data.credit.assetsDetails;
   }
 
   const backstories = data.backstory.map((story) => {
@@ -143,9 +144,9 @@ const updateActorData = (actor, data, url) => {
     title: "メモ",
     value: data.note.trim(),
   });
-  updateData["data.biography"] = backstories;
+  updateData["system.biography"] = backstories;
 
-  updateData["data.backstory"] =
+  updateData["system.backstory"] =
     `<p>Auto import from ${url}</p>` +
     backstories
       .map((story) => {
@@ -161,7 +162,7 @@ const updateActorData = (actor, data, url) => {
 
 const addSkills = async (actor, data, list) => {
   const newSkills = data.skills
-    .filter((skill) => skill.value > 0)
+    .filter((skill) => skill.value > 0 || skill.name === "クトゥルフ神話")
     .map((skill) => {
       let specialization = "";
       let name = skill.name;
@@ -200,7 +201,8 @@ const addSkills = async (actor, data, list) => {
         newSkill.img = existingSkill.img;
         newSkill.system = { ...existingSkill.system };
         newSkill.flags = { ...existingSkill.flags };
-        const experience = skill.value - Number(existingSkill.system.base);
+        const skillBase = (name === "回避" ? Math.floor(data.characteristics["dex"]/2) : existingSkill.system.base);
+        const experience = skill.value - Number(skillBase);
         if (experience !== 0 && experience !== NaN) {
           newSkill.system.adjustments = { experience };
         }
@@ -267,7 +269,7 @@ const DEFAULT_PROPERTIES = {
 //     const newWeapon = {
 //       name: name,
 //       type: "weapon",
-//       data: {
+//       system: {
 //         properties: {
 //           rngd: !Boolean(weapon.range),
 //           melee: weapon.damage.includes("DB"), // if a weapon doesDamageBonus usually means it's a melee weapon
